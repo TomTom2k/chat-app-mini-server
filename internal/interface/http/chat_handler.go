@@ -197,6 +197,7 @@ func (h *ChatHandler) SendMessage(c *gin.Context) {
 		}
 		select {
 		case h.Hub.Broadcast <- message:
+			// Message queued for broadcast
 		default:
 			// Channel is full, skip broadcast
 		}

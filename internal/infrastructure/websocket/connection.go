@@ -76,11 +76,13 @@ func (c *Client) ReadPump() {
 				c.Mu.Lock()
 				c.Chats[chatID] = true
 				c.Mu.Unlock()
+				log.Printf("Client %s subscribed to chat %s", c.UserID, chatID)
 			}
 			if groupID := message.GroupID; groupID != "" {
 				c.Mu.Lock()
 				c.Chats[groupID] = true
 				c.Mu.Unlock()
+				log.Printf("Client %s subscribed to group %s", c.UserID, groupID)
 			}
 		case "unsubscribe":
 			// Unsubscribe from a chat
@@ -88,11 +90,13 @@ func (c *Client) ReadPump() {
 				c.Mu.Lock()
 				delete(c.Chats, chatID)
 				c.Mu.Unlock()
+				log.Printf("Client %s unsubscribed from chat %s", c.UserID, chatID)
 			}
 			if groupID := message.GroupID; groupID != "" {
 				c.Mu.Lock()
 				delete(c.Chats, groupID)
 				c.Mu.Unlock()
+				log.Printf("Client %s unsubscribed from group %s", c.UserID, groupID)
 			}
 		case "typing":
 			// Broadcast typing indicator

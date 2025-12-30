@@ -44,6 +44,7 @@ func (h *WebSocketHandler) HandleWebSocket(c *gin.Context) {
 	}
 
 	if token == "" {
+		log.Printf("WebSocket: Token required")
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "token required"})
 		return
 	}
@@ -51,18 +52,22 @@ func (h *WebSocketHandler) HandleWebSocket(c *gin.Context) {
 	// Validate token
 	claims, err := jwt.ValidateToken(token, h.Config.JWTSecret)
 	if err != nil {
+		log.Printf("WebSocket: Invalid token: %v", err)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired token"})
 		return
 	}
 
 	userID := claims.UserID
+	log.Printf("WebSocket: User %s connecting", userID)
 
 	// Upgrade connection
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
-		log.Printf("WebSocket upgrade error: %v", err)
+		log.Printf("WebSocket: Upgrade error: %v", err)
 		return
 	}
+
+	log.Printf("WebSocket: User %s connected successfully", userID)
 
 	// Create connection wrapper
 	wsConn := &ws.Connection{

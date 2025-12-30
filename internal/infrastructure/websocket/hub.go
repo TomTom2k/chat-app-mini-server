@@ -35,6 +35,9 @@ type Hub struct {
 	// User repository for updating online status
 	UserRepo domain.UserRepository
 
+	// Chat repository for getting chat participants
+	ChatRepo domain.ChatRepository
+
 	mu sync.RWMutex
 }
 
@@ -49,13 +52,14 @@ type Message struct {
 	Timestamp string                 `json:"timestamp,omitempty"`
 }
 
-func NewHub(userRepo domain.UserRepository) *Hub {
+func NewHub(userRepo domain.UserRepository, chatRepo domain.ChatRepository) *Hub {
 	return &Hub{
 		clients:    make(map[string]*Client),
 		Broadcast:  make(chan *Message, 256),
 		Register:   make(chan *Client),
 		Unregister: make(chan *Client),
 		UserRepo:   userRepo,
+		ChatRepo:   chatRepo,
 		mu:         sync.RWMutex{},
 	}
 }
@@ -107,6 +111,7 @@ func (h *Hub) Run() {
 }
 
 func (h *Hub) handleBroadcast(message *Message) {
+	log.Printf("handleBroadcast: Received message type %s, ChatID: %s, SenderID: %s", message.Type, message.ChatID, message.SenderID)
 	switch message.Type {
 	case "message":
 		h.broadcastToChat(message)
@@ -120,25 +125,74 @@ func (h *Hub) handleBroadcast(message *Message) {
 }
 
 func (h *Hub) broadcastToChat(message *Message) {
+	chatID := message.ChatID
+	if chatID == "" {
+		chatID = message.GroupID
+	}
+
+	if chatID == "" {
+		log.Printf("broadcastToChat: No chatID or groupID in message")
+		return
+	}
+
+	log.Printf("broadcastToChat: Broadcasting message to chat %s (Total clients: %d)", chatID, len(h.clients))
+
+	// Get chat participants
+	chat, err := h.ChatRepo.GetChatByID(chatID)
+	if err != nil {
+		log.Printf("broadcastToChat: Failed to get chat %s: %v", chatID, err)
+		// Fallback: send to subscribed clients only
+		h.broadcastToSubscribedClients(message, chatID)
+		return
+	}
+
+	// Send to both participants of the chat (if they're online)
+	participants := []string{chat.UserID1, chat.UserID2}
+	
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
-		// Send to all clients subscribed to this chat
-		for _, client := range h.clients {
-			client.Mu.RLock()
-			chatID := message.ChatID
-			if chatID == "" {
-				chatID = message.GroupID
-			}
-			subscribed := client.Chats[chatID]
-			client.Mu.RUnlock()
+	for _, userID := range participants {
+		// Skip sender
+		if userID == message.SenderID {
+			continue
+		}
 
-		if subscribed {
+		if client, ok := h.clients[userID]; ok {
+			log.Printf("broadcastToChat: Sending to participant %s", userID)
 			select {
 			case client.Send <- h.messageToBytes(message):
+				log.Printf("broadcastToChat: Message sent to participant %s", userID)
 			default:
+				log.Printf("broadcastToChat: Failed to send to participant %s, closing connection", userID)
 				close(client.Send)
-				delete(h.clients, client.UserID)
+				delete(h.clients, userID)
+			}
+		} else {
+			log.Printf("broadcastToChat: Participant %s is not online", userID)
+		}
+	}
+}
+
+func (h *Hub) broadcastToSubscribedClients(message *Message, chatID string) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	// Send to all clients subscribed to this chat
+	for userID, client := range h.clients {
+		client.Mu.RLock()
+		subscribed := client.Chats[chatID]
+		client.Mu.RUnlock()
+
+		if subscribed {
+			log.Printf("broadcastToChat: Sending to subscribed client %s", userID)
+			select {
+			case client.Send <- h.messageToBytes(message):
+				log.Printf("broadcastToChat: Message sent to subscribed client %s", userID)
+			default:
+				log.Printf("broadcastToChat: Failed to send to subscribed client %s, closing connection", userID)
+				close(client.Send)
+				delete(h.clients, userID)
 			}
 		}
 	}

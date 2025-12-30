@@ -8,6 +8,9 @@ import (
 
 type FriendUseCase struct {
 	UserRepo domain.UserRepository
+	Hub      interface {
+		IsUserOnline(userID string) bool
+	}
 }
 
 func (uc *FriendUseCase) GetFriends(userID string) ([]map[string]interface{}, error) {
@@ -28,10 +31,22 @@ func (uc *FriendUseCase) GetFriends(userID string) ([]map[string]interface{}, er
 
 	result := make([]map[string]interface{}, 0)
 	for _, friendUser := range friendUsers {
+		// Check online status from Hub if available, otherwise use database status
+		isOnline := friendUser.Online
+		if uc.Hub != nil {
+			isOnline = uc.Hub.IsUserOnline(friendUser.ID)
+		}
+		
+		status := "Offline"
+		if isOnline {
+			status = "Online"
+		}
+		
 		result = append(result, map[string]interface{}{
 			"id":     friendUser.ID,
 			"name":   friendUser.FullName,
-			"status": "Online", // TODO: implement status
+			"status": status,
+			"online": isOnline,
 			"avatar": friendUser.Avatar,
 			"email":  friendUser.Email,
 		})

@@ -12,6 +12,9 @@ type ChatUseCase struct {
 	ChatRepo    domain.ChatRepository
 	UserRepo    domain.UserRepository
 	MessageRepo domain.MessageRepository
+	Hub         interface {
+		IsUserOnline(userID string) bool
+	}
 }
 
 func (uc *ChatUseCase) GetChats(userID string) ([]map[string]interface{}, error) {
@@ -35,14 +38,22 @@ func (uc *ChatUseCase) GetChats(userID string) ([]map[string]interface{}, error)
 			continue
 		}
 
+		// Check online status from Hub if available, otherwise use database status
+		isOnline := otherUser.Online
+		if uc.Hub != nil {
+			isOnline = uc.Hub.IsUserOnline(otherUserID)
+		}
+
 		chatData := map[string]interface{}{
 			"id":          chat.ID,
 			"name":        otherUser.FullName,
 			"lastMessage": chat.LastMessage,
 			"time":        chat.LastMessageTime,
 			"unread":      chat.Unread,
-			"online":      false, // TODO: implement online status
-			"avatar":      "",
+			"online":      isOnline,
+			"avatar":      otherUser.Avatar,
+			"userId1":     chat.UserID1,
+			"userId2":     chat.UserID2,
 		}
 		result = append(result, chatData)
 	}
@@ -74,18 +85,26 @@ func (uc *ChatUseCase) GetChat(chatID, userID string) (map[string]interface{}, e
 		return nil, err
 	}
 
+	// Check online status from Hub if available, otherwise use database status
+	isOnline := otherUser.Online
+	if uc.Hub != nil {
+		isOnline = uc.Hub.IsUserOnline(otherUserID)
+	}
+
 	result := map[string]interface{}{
-		"id":     chat.ID,
-		"name":   otherUser.FullName,
-		"online": false, // TODO: implement online status
-		"avatar": "",
+		"id":      chat.ID,
+		"name":    otherUser.FullName,
+		"online":  isOnline,
+		"avatar":  otherUser.Avatar,
+		"userId1": chat.UserID1,
+		"userId2": chat.UserID2,
 		"users": []map[string]interface{}{
 			{
 				"id":     otherUser.ID,
 				"name":   otherUser.FullName,
 				"email":  otherUser.Email,
-				"avatar": "",
-				"online": false,
+				"avatar": otherUser.Avatar,
+				"online": isOnline,
 			},
 		},
 	}
