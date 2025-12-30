@@ -3,13 +3,16 @@ package http
 import (
 	"net/http"
 	"strings"
+	"time"
 
+	"github.com/TomTom2k/chat-app/server/internal/infrastructure/websocket"
 	"github.com/TomTom2k/chat-app/server/internal/usecase"
 	"github.com/gin-gonic/gin"
 )
 
 type ChatHandler struct {
 	ChatUseCase usecase.ChatUseCase
+	Hub         *websocket.Hub
 }
 
 // GetChats godoc
@@ -174,6 +177,29 @@ func (h *ChatHandler) SendMessage(c *gin.Context) {
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
+	}
+
+	// Broadcast message via WebSocket
+	if h.Hub != nil {
+		message := &websocket.Message{
+			Type:      "message",
+			ChatID:    chatID,
+			SenderID:  userID.(string),
+			Content:   req.Content,
+			Timestamp: time.Now().Format(time.RFC3339),
+			Data: map[string]interface{}{
+				"id":       result["id"],
+				"sender":   result["sender"],
+				"senderId": result["senderId"],
+				"content":  result["content"],
+				"time":     result["time"],
+			},
+		}
+		select {
+		case h.Hub.Broadcast <- message:
+		default:
+			// Channel is full, skip broadcast
+		}
 	}
 
 	c.JSON(http.StatusOK, result)

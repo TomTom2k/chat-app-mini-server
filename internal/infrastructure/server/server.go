@@ -81,7 +81,14 @@ func setupRoutes(router *gin.Engine, container *di.Container) {
 		setupFriendRoutes(api, container)
 		setupGroupRoutes(api, container)
 		setupUserRoutes(api, container)
+		setupWebSocketRoutes(router, container)
 	}
+}
+
+func setupWebSocketRoutes(router *gin.Engine, container *di.Container) {
+	// WebSocket route doesn't use AuthMiddleware because we handle auth in the handler
+	// to support token in query parameter
+	router.GET("/ws", container.WebSocketHandler.HandleWebSocket)
 }
 
 func setupAuthRoutes(api *gin.RouterGroup, container *di.Container) {

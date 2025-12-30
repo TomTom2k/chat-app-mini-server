@@ -4,7 +4,9 @@ import (
 	"github.com/TomTom2k/chat-app/server/internal/config"
 	"github.com/TomTom2k/chat-app/server/internal/domain"
 	"github.com/TomTom2k/chat-app/server/internal/infrastructure/repository"
+	"github.com/TomTom2k/chat-app/server/internal/infrastructure/websocket"
 	"github.com/TomTom2k/chat-app/server/internal/interface/http"
+	wsHandler "github.com/TomTom2k/chat-app/server/internal/interface/websocket"
 	"github.com/TomTom2k/chat-app/server/internal/usecase"
 )
 
@@ -27,6 +29,9 @@ type Container struct {
 	ChatHandler         *http.ChatHandler
 	FriendHandler       *http.FriendHandler
 	GroupHandler        *http.GroupHandler
+	
+	Hub                 *websocket.Hub
+	WebSocketHandler    *wsHandler.WebSocketHandler
 }
 
 // NewContainer initializes all dependencies
@@ -69,6 +74,7 @@ func NewContainer(cfg *config.Config) *Container {
 
 	chatHandler := &http.ChatHandler{
 		ChatUseCase: *chatUseCase,
+		Hub:         hub,
 	}
 
 	friendHandler := &http.FriendHandler{
@@ -77,6 +83,16 @@ func NewContainer(cfg *config.Config) *Container {
 
 	groupHandler := &http.GroupHandler{
 		GroupUseCase: *groupUseCase,
+	}
+
+	// Initialize WebSocket Hub
+	hub := websocket.NewHub(userRepo)
+	go hub.Run()
+
+	// Initialize WebSocket Handler
+	wsHandler := &wsHandler.WebSocketHandler{
+		Hub:    hub,
+		Config: cfg,
 	}
 
 	return &Container{
@@ -95,6 +111,8 @@ func NewContainer(cfg *config.Config) *Container {
 		ChatHandler:         chatHandler,
 		FriendHandler:       friendHandler,
 		GroupHandler:        groupHandler,
+		Hub:                 hub,
+		WebSocketHandler:    wsHandler,
 	}
 }
 
