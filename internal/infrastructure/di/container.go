@@ -50,14 +50,20 @@ func NewContainer(cfg *config.Config) *Container {
 		JWTSecret: cfg.JWTSecret,
 	}
 
+	// Initialize WebSocket Hub first (needed by use cases)
+	hub := websocket.NewHub(userRepo, chatRepo)
+	go hub.Run()
+
 	chatUseCase := &usecase.ChatUseCase{
 		ChatRepo:    chatRepo,
 		UserRepo:    userRepo,
 		MessageRepo: messageRepo,
+		Hub:         hub,
 	}
 
 	friendUseCase := &usecase.FriendUseCase{
 		UserRepo: userRepo,
+		Hub:      hub,
 	}
 
 	groupUseCase := &usecase.GroupUseCase{
@@ -84,10 +90,6 @@ func NewContainer(cfg *config.Config) *Container {
 	groupHandler := &http.GroupHandler{
 		GroupUseCase: *groupUseCase,
 	}
-
-	// Initialize WebSocket Hub
-	hub := websocket.NewHub(userRepo)
-	go hub.Run()
 
 	// Initialize WebSocket Handler
 	wsHandler := &wsHandler.WebSocketHandler{
