@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/TomTom2k/chat-app/server/internal/domain"
@@ -103,12 +104,29 @@ func (r *userRepository) SearchUsers(query string) ([]entity.User, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	filter := bson.M{
-		"$or": []bson.M{
-			{"email": bson.M{"$regex": query, "$options": "i"}},
-			{"full_name": bson.M{"$regex": query, "$options": "i"}},
-			{"username": bson.M{"$regex": query, "$options": "i"}},
-		},
+	// Check if query looks like an email (contains @)
+	// If it does, search for exact email match
+	// Otherwise, search by name/username
+	var filter bson.M
+
+	if strings.Contains(query, "@") {
+		// Email search - find exact match or emails starting with the query
+		filter = bson.M{
+			"$or": []bson.M{
+				{"email": bson.M{"$eq": query}}, // Exact match first
+				{"email": bson.M{"$regex": "^" + query, "$options": "i"}}, // Then prefix match
+			},
+		}
+	} else {
+		// Name/username search - partial match
+		// Also search email prefix (before @) - e.g., "user" matches "user@gmail.com"
+		filter = bson.M{
+			"$or": []bson.M{
+				{"full_name": bson.M{"$regex": query, "$options": "i"}},
+				{"username": bson.M{"$regex": query, "$options": "i"}},
+				{"email": bson.M{"$regex": "^" + query + "@", "$options": "i"}},
+			},
+		}
 	}
 
 	cursor, err := r.collection.Find(ctx, filter)
