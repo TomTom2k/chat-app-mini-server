@@ -111,7 +111,6 @@ func (h *Hub) Run() {
 }
 
 func (h *Hub) handleBroadcast(message *Message) {
-	log.Printf("handleBroadcast: Received message type %s, ChatID: %s, SenderID: %s", message.Type, message.ChatID, message.SenderID)
 	switch message.Type {
 	case "message":
 		h.broadcastToChat(message)
@@ -131,16 +130,12 @@ func (h *Hub) broadcastToChat(message *Message) {
 	}
 
 	if chatID == "" {
-		log.Printf("broadcastToChat: No chatID or groupID in message")
 		return
 	}
-
-	log.Printf("broadcastToChat: Broadcasting message to chat %s (Total clients: %d)", chatID, len(h.clients))
 
 	// Get chat participants
 	chat, err := h.ChatRepo.GetChatByID(chatID)
 	if err != nil {
-		log.Printf("broadcastToChat: Failed to get chat %s: %v", chatID, err)
 		// Fallback: send to subscribed clients only
 		h.broadcastToSubscribedClients(message, chatID)
 		return
@@ -159,17 +154,12 @@ func (h *Hub) broadcastToChat(message *Message) {
 		}
 
 		if client, ok := h.clients[userID]; ok {
-			log.Printf("broadcastToChat: Sending to participant %s", userID)
 			select {
 			case client.Send <- h.messageToBytes(message):
-				log.Printf("broadcastToChat: Message sent to participant %s", userID)
 			default:
-				log.Printf("broadcastToChat: Failed to send to participant %s, closing connection", userID)
 				close(client.Send)
 				delete(h.clients, userID)
 			}
-		} else {
-			log.Printf("broadcastToChat: Participant %s is not online", userID)
 		}
 	}
 }
@@ -185,12 +175,9 @@ func (h *Hub) broadcastToSubscribedClients(message *Message, chatID string) {
 		client.Mu.RUnlock()
 
 		if subscribed {
-			log.Printf("broadcastToChat: Sending to subscribed client %s", userID)
 			select {
 			case client.Send <- h.messageToBytes(message):
-				log.Printf("broadcastToChat: Message sent to subscribed client %s", userID)
 			default:
-				log.Printf("broadcastToChat: Failed to send to subscribed client %s, closing connection", userID)
 				close(client.Send)
 				delete(h.clients, userID)
 			}
