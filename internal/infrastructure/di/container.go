@@ -52,8 +52,7 @@ func NewContainer(cfg *config.Config) *Container {
 	}
 
 	friendUseCase := &usecase.FriendUseCase{
-		FriendRepo: friendRepo,
-		UserRepo:   userRepo,
+		UserRepo: userRepo,
 	}
 
 	groupUseCase := &usecase.GroupUseCase{

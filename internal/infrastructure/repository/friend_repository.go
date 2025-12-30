@@ -118,6 +118,52 @@ func (r *friendRepository) UpdateFriend(friend entity.Friend) error {
 	return err
 }
 
+func (r *friendRepository) GetPendingRequestsByUserID(userID string) ([]entity.Friend, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	filter := bson.M{
+		"user_id_2": userID,
+		"status":    "pending",
+	}
+
+	cursor, err := r.collection.Find(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var friends []entity.Friend
+	if err := cursor.All(ctx, &friends); err != nil {
+		return nil, err
+	}
+
+	return friends, nil
+}
+
+func (r *friendRepository) GetSentRequestsByUserID(userID string) ([]entity.Friend, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	filter := bson.M{
+		"user_id_1": userID,
+		"status":    "pending",
+	}
+
+	cursor, err := r.collection.Find(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var friends []entity.Friend
+	if err := cursor.All(ctx, &friends); err != nil {
+		return nil, err
+	}
+
+	return friends, nil
+}
+
 
 
 

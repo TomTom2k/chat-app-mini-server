@@ -101,9 +101,27 @@ func (uc *ChatUseCase) CreateChat(userID1, userID2 string) (map[string]interface
 	}
 
 	// Verify both users exist
-	_, err := uc.UserRepo.GetByID(userID2)
+	user1, err := uc.UserRepo.GetByID(userID1)
 	if err != nil {
 		return nil, errors.New("user not found")
+	}
+
+	_, err = uc.UserRepo.GetByID(userID2)
+	if err != nil {
+		return nil, errors.New("user not found")
+	}
+
+	// Check if users are friends (accepted)
+	isFriend := false
+	for _, friendID := range user1.Friends {
+		if friendID == userID2 {
+			isFriend = true
+			break
+		}
+	}
+
+	if !isFriend {
+		return nil, errors.New("you can only chat with accepted friends")
 	}
 
 	chat := entity.Chat{

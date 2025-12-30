@@ -8,6 +8,14 @@ type UserRepository interface {
 	GetByUsername(username string) (entity.User, error)
 	GetByID(id string) (entity.User, error)
 	SearchUsers(query string) ([]entity.User, error)
+	UpdateUser(user entity.User) error
+	AddFriend(userID1, userID2 string) error
+	RemoveFriend(userID1, userID2 string) error
+	AddSentRequest(userID, targetUserID string) error
+	RemoveSentRequest(userID, targetUserID string) error
+	AddPendingRequest(userID, senderUserID string) error
+	RemovePendingRequest(userID, senderUserID string) error
+	GetUsersByIDs(userIDs []string) ([]entity.User, error)
 }
 
 type ChatRepository interface {
@@ -30,6 +38,8 @@ type FriendRepository interface {
 	GetFriendsByUserID(userID string) ([]entity.Friend, error)
 	GetFriendByID(friendID string) (entity.Friend, error)
 	GetFriendByUserIDs(userID1, userID2 string) (entity.Friend, error)
+	GetPendingRequestsByUserID(userID string) ([]entity.Friend, error) // Lời mời nhận được (userID là UserID2)
+	GetSentRequestsByUserID(userID string) ([]entity.Friend, error)     // Lời mời đã gửi (userID là UserID1)
 	DeleteFriend(friendID string) error
 	UpdateFriend(friend entity.Friend) error
 }

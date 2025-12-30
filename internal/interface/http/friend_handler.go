@@ -142,3 +142,117 @@ func (h *FriendHandler) SearchUsers(c *gin.Context) {
 	c.JSON(http.StatusOK, users)
 }
 
+// GetPendingRequests godoc
+// @Summary      Lấy danh sách lời mời kết bạn đang chờ
+// @Description  Lấy danh sách lời mời kết bạn mà user nhận được
+// @Tags         Friends
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200  {array}   map[string]interface{}
+// @Failure      401  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Router       /friends/requests/pending [get]
+func (h *FriendHandler) GetPendingRequests(c *gin.Context) {
+	userID, _ := c.Get("userID")
+
+	requests, err := h.FriendUseCase.GetPendingRequests(userID.(string))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, requests)
+}
+
+// GetSentRequests godoc
+// @Summary      Lấy danh sách lời mời kết bạn đã gửi
+// @Description  Lấy danh sách lời mời kết bạn mà user đã gửi
+// @Tags         Friends
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200  {array}   map[string]interface{}
+// @Failure      401  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Router       /friends/requests/sent [get]
+func (h *FriendHandler) GetSentRequests(c *gin.Context) {
+	userID, _ := c.Get("userID")
+
+	requests, err := h.FriendUseCase.GetSentRequests(userID.(string))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, requests)
+}
+
+// AcceptFriendRequest godoc
+// @Summary      Chấp nhận lời mời kết bạn
+// @Description  Chấp nhận một lời mời kết bạn
+// @Tags         Friends
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        requestId  path  string  true  "Sender User ID"
+// @Success      200  {object}  map[string]string
+// @Failure      400  {object}  map[string]string
+// @Failure      401  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Router       /friends/requests/{requestId}/accept [post]
+func (h *FriendHandler) AcceptFriendRequest(c *gin.Context) {
+	senderUserID := c.Param("requestId") // requestId is actually senderUserID
+	userID, _ := c.Get("userID")
+
+	err := h.FriendUseCase.AcceptFriendRequest(senderUserID, userID.(string))
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		if strings.Contains(err.Error(), "unauthorized") {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Friend request accepted successfully"})
+}
+
+// RejectFriendRequest godoc
+// @Summary      Từ chối lời mời kết bạn
+// @Description  Từ chối một lời mời kết bạn
+// @Tags         Friends
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        requestId  path  string  true  "Sender User ID"
+// @Success      200  {object}  map[string]string
+// @Failure      400  {object}  map[string]string
+// @Failure      401  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Router       /friends/requests/{requestId}/reject [post]
+func (h *FriendHandler) RejectFriendRequest(c *gin.Context) {
+	senderUserID := c.Param("requestId") // requestId is actually senderUserID
+	userID, _ := c.Get("userID")
+
+	err := h.FriendUseCase.RejectFriendRequest(senderUserID, userID.(string))
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		if strings.Contains(err.Error(), "unauthorized") {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Friend request rejected successfully"})
+}
+

@@ -112,6 +112,12 @@ func setupFriendRoutes(api *gin.RouterGroup, container *di.Container) {
 		friends.GET("", container.FriendHandler.GetFriends)
 		friends.POST("", container.FriendHandler.AddFriend)
 		friends.DELETE("/:friendId", container.FriendHandler.DeleteFriend)
+		
+		// Friend requests
+		friends.GET("/requests/pending", container.FriendHandler.GetPendingRequests)
+		friends.GET("/requests/sent", container.FriendHandler.GetSentRequests)
+		friends.POST("/requests/:requestId/accept", container.FriendHandler.AcceptFriendRequest)
+		friends.POST("/requests/:requestId/reject", container.FriendHandler.RejectFriendRequest)
 	}
 
 	users := api.Group("/users")
