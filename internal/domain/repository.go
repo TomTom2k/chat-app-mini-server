@@ -31,6 +31,11 @@ type MessageRepository interface {
 	GetMessagesByChatID(chatID string) ([]entity.Message, error)
 	GetMessagesByGroupID(groupID string) ([]entity.Message, error)
 	GetMessageByID(messageID string) (entity.Message, error)
+	UpdateMessage(message entity.Message) error
+	AddReaction(messageID, userID, emoji string) error
+	RemoveReaction(messageID, userID, emoji string) error
+	MarkAsRead(messageID, userID string) error
+	MarkAsDelivered(messageID string) error
 }
 
 type FriendRepository interface {

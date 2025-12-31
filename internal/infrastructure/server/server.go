@@ -73,6 +73,9 @@ func setupRoutes(router *gin.Engine, container *di.Container) {
 	// Swagger documentation
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
+	// Static file serving for uploads
+	router.Static("/uploads", "./uploads")
+
 	// API routes
 	api := router.Group("/api")
 	{
@@ -109,6 +112,10 @@ func setupChatRoutes(api *gin.RouterGroup, container *di.Container) {
 		chats.GET("/:chatId", container.ChatHandler.GetChat)
 		chats.GET("/:chatId/messages", container.ChatHandler.GetMessages)
 		chats.POST("/:chatId/messages", container.ChatHandler.SendMessage)
+		chats.POST("/upload", container.ChatHandler.UploadFile)
+		chats.POST("/messages/:messageId/reactions", container.ChatHandler.AddReaction)
+		chats.DELETE("/messages/:messageId/reactions", container.ChatHandler.RemoveReaction)
+		chats.POST("/messages/:messageId/read", container.ChatHandler.MarkAsRead)
 	}
 }
 

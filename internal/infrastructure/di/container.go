@@ -51,7 +51,7 @@ func NewContainer(cfg *config.Config) *Container {
 	}
 
 	// Initialize WebSocket Hub first (needed by use cases)
-	hub := websocket.NewHub(userRepo, chatRepo)
+	hub := websocket.NewHub(userRepo, chatRepo, messageRepo)
 	go hub.Run()
 
 	chatUseCase := &usecase.ChatUseCase{
@@ -81,6 +81,7 @@ func NewContainer(cfg *config.Config) *Container {
 	chatHandler := &http.ChatHandler{
 		ChatUseCase: *chatUseCase,
 		Hub:         hub,
+		MessageRepo: messageRepo,
 	}
 
 	friendHandler := &http.FriendHandler{

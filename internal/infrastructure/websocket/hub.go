@@ -38,6 +38,9 @@ type Hub struct {
 	// Chat repository for getting chat participants
 	ChatRepo domain.ChatRepository
 
+	// Message repository for getting message info
+	MessageRepo domain.MessageRepository
+
 	mu sync.RWMutex
 }
 
@@ -52,15 +55,16 @@ type Message struct {
 	Timestamp string                 `json:"timestamp,omitempty"`
 }
 
-func NewHub(userRepo domain.UserRepository, chatRepo domain.ChatRepository) *Hub {
+func NewHub(userRepo domain.UserRepository, chatRepo domain.ChatRepository, messageRepo domain.MessageRepository) *Hub {
 	return &Hub{
-		clients:    make(map[string]*Client),
-		Broadcast:  make(chan *Message, 256),
-		Register:   make(chan *Client),
-		Unregister: make(chan *Client),
-		UserRepo:   userRepo,
-		ChatRepo:   chatRepo,
-		mu:         sync.RWMutex{},
+		clients:     make(map[string]*Client),
+		Broadcast:   make(chan *Message, 256),
+		Register:    make(chan *Client),
+		Unregister:  make(chan *Client),
+		UserRepo:    userRepo,
+		ChatRepo:    chatRepo,
+		MessageRepo: messageRepo,
+		mu:          sync.RWMutex{},
 	}
 }
 
@@ -116,6 +120,25 @@ func (h *Hub) handleBroadcast(message *Message) {
 		h.broadcastToChat(message)
 	case "typing":
 		h.broadcastToChat(message)
+	case "reaction", "read_receipt":
+		// Get chat ID from message data or from the original message
+		if message.ChatID != "" {
+			h.broadcastToChat(message)
+		} else {
+			// Try to get chatID from messageID
+			msgID, ok := message.Data["messageId"].(string)
+			if ok && h.MessageRepo != nil {
+				msg, err := h.MessageRepo.GetMessageByID(msgID)
+				if err == nil {
+					message.ChatID = msg.ChatID
+					h.broadcastToChat(message)
+				} else {
+					h.broadcastToAll(message)
+				}
+			} else {
+				h.broadcastToAll(message)
+			}
+		}
 	case "online", "offline":
 		h.broadcastToFriends(message)
 	default:

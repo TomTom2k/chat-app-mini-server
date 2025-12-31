@@ -28,8 +28,24 @@ func (r *messageRepository) CreateMessage(message entity.Message) error {
 	defer cancel()
 
 	message.CreatedAt = time.Now()
+	message.UpdatedAt = time.Now()
 	if message.ID == "" {
 		message.ID = generateID()
+	}
+	if message.Type == "" {
+		message.Type = entity.MessageTypeText
+	}
+	if message.Status == "" {
+		message.Status = entity.MessageStatusSent
+	}
+	if message.Reactions == nil {
+		message.Reactions = []entity.MessageReaction{}
+	}
+	if message.ReadReceipts == nil {
+		message.ReadReceipts = []entity.ReadReceipt{}
+	}
+	if message.Attachments == nil {
+		message.Attachments = []entity.MessageAttachment{}
 	}
 
 	_, err := r.collection.InsertOne(ctx, message)
@@ -91,6 +107,122 @@ func (r *messageRepository) GetMessageByID(messageID string) (entity.Message, er
 		return entity.Message{}, err
 	}
 	return message, nil
+}
+
+func (r *messageRepository) UpdateMessage(message entity.Message) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	message.UpdatedAt = time.Now()
+	_, err := r.collection.UpdateOne(
+		ctx,
+		bson.M{"_id": message.ID},
+		bson.M{"$set": message},
+	)
+	return err
+}
+
+func (r *messageRepository) AddReaction(messageID, userID, emoji string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Check if reaction already exists
+	var message entity.Message
+	err := r.collection.FindOne(ctx, bson.M{"_id": messageID}).Decode(&message)
+	if err != nil {
+		return err
+	}
+
+	// Check if user already reacted with this emoji
+	for _, reaction := range message.Reactions {
+		if reaction.UserID == userID && reaction.Emoji == emoji {
+			return nil // Already reacted
+		}
+	}
+
+	// Add reaction
+	reaction := entity.MessageReaction{
+		UserID: userID,
+		Emoji:  emoji,
+	}
+	_, err = r.collection.UpdateOne(
+		ctx,
+		bson.M{"_id": messageID},
+		bson.M{
+			"$push": bson.M{"reactions": reaction},
+			"$set":  bson.M{"updated_at": time.Now()},
+		},
+	)
+	return err
+}
+
+func (r *messageRepository) RemoveReaction(messageID, userID, emoji string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	_, err := r.collection.UpdateOne(
+		ctx,
+		bson.M{"_id": messageID},
+		bson.M{
+			"$pull": bson.M{"reactions": bson.M{"user_id": userID, "emoji": emoji}},
+			"$set":  bson.M{"updated_at": time.Now()},
+		},
+	)
+	return err
+}
+
+func (r *messageRepository) MarkAsRead(messageID, userID string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Check if already read by this user
+	var message entity.Message
+	err := r.collection.FindOne(ctx, bson.M{"_id": messageID}).Decode(&message)
+	if err != nil {
+		return err
+	}
+
+	// Check if already in read receipts
+	for _, receipt := range message.ReadReceipts {
+		if receipt.UserID == userID {
+			return nil // Already read
+		}
+	}
+
+	// Add read receipt
+	receipt := entity.ReadReceipt{
+		UserID: userID,
+		ReadAt: time.Now(),
+	}
+	_, err = r.collection.UpdateOne(
+		ctx,
+		bson.M{"_id": messageID},
+		bson.M{
+			"$push": bson.M{"read_receipts": receipt},
+			"$set": bson.M{
+				"status":     entity.MessageStatusRead,
+				"updated_at": time.Now(),
+			},
+		},
+	)
+	return err
+}
+
+func (r *messageRepository) MarkAsDelivered(messageID string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	_, err := r.collection.UpdateOne(
+		ctx,
+		bson.M{"_id": messageID},
+		bson.M{
+			"$set": bson.M{
+				"status":     entity.MessageStatusDelivered,
+				"updated_at": time.Now(),
+			},
+		},
+	)
+	return err
 }
 
 

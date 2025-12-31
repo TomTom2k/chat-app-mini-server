@@ -182,20 +182,13 @@ func (uc *ChatUseCase) GetMessages(chatID, userID string) ([]map[string]interfac
 	result := make([]map[string]interface{}, 0)
 	for _, msg := range messages {
 		sender, _ := uc.UserRepo.GetByID(msg.SenderID)
-		result = append(result, map[string]interface{}{
-			"id":       msg.ID,
-			"sender":   sender.FullName,
-			"senderId": msg.SenderID,
-			"content":  msg.Content,
-			"time":     msg.CreatedAt,
-			"isMe":     msg.SenderID == userID,
-		})
+		result = append(result, uc.messageToMap(msg, userID, sender))
 	}
 
 	return result, nil
 }
 
-func (uc *ChatUseCase) SendMessage(chatID, senderID, content string) (map[string]interface{}, error) {
+func (uc *ChatUseCase) SendMessage(chatID, senderID, content string, replyToID string, messageType entity.MessageType, attachments []entity.MessageAttachment) (map[string]interface{}, error) {
 	// Verify user is part of this chat
 	chat, err := uc.ChatRepo.GetChatByID(chatID)
 	if err != nil {
@@ -206,10 +199,28 @@ func (uc *ChatUseCase) SendMessage(chatID, senderID, content string) (map[string
 		return nil, errors.New("unauthorized")
 	}
 
+	// Verify replyToID if provided
+	if replyToID != "" {
+		_, err := uc.MessageRepo.GetMessageByID(replyToID)
+		if err != nil {
+			return nil, errors.New("reply to message not found")
+		}
+	}
+
+	if messageType == "" {
+		messageType = entity.MessageTypeText
+	}
+
 	message := entity.Message{
-		ChatID:   chatID,
-		SenderID: senderID,
-		Content:  content,
+		ChatID:      chatID,
+		SenderID:    senderID,
+		Type:        messageType,
+		Content:     content,
+		ReplyToID:   replyToID,
+		Attachments: attachments,
+		Reactions:   []entity.MessageReaction{},
+		ReadReceipts: []entity.ReadReceipt{},
+		Status:      entity.MessageStatusSent,
 	}
 
 	err = uc.MessageRepo.CreateMessage(message)
@@ -219,7 +230,20 @@ func (uc *ChatUseCase) SendMessage(chatID, senderID, content string) (map[string
 
 	// Update chat last message
 	now := time.Now()
-	chat.LastMessage = content
+	lastMessageText := content
+	if len(attachments) > 0 {
+		switch attachments[0].Type {
+		case "image":
+			lastMessageText = "📷 Hình ảnh"
+		case "video":
+			lastMessageText = "🎥 Video"
+		case "file":
+			lastMessageText = "📎 " + attachments[0].FileName
+		case "audio":
+			lastMessageText = "🎤 Tin nhắn thoại"
+		}
+	}
+	chat.LastMessage = lastMessageText
 	chat.LastMessageTime = &now
 	if chat.UserID1 == senderID {
 		chat.Unread++
@@ -233,16 +257,119 @@ func (uc *ChatUseCase) SendMessage(chatID, senderID, content string) (map[string
 	if len(messages) > 0 {
 		lastMsg := messages[len(messages)-1]
 		sender, _ := uc.UserRepo.GetByID(senderID)
-		return map[string]interface{}{
-			"id":       lastMsg.ID,
-			"sender":   sender.FullName,
-			"senderId": lastMsg.SenderID,
-			"content":  lastMsg.Content,
-			"time":     lastMsg.CreatedAt,
-		}, nil
+		return uc.messageToMap(lastMsg, senderID, sender), nil
 	}
 
 	return nil, errors.New("failed to create message")
+}
+
+func (uc *ChatUseCase) AddReaction(messageID, userID, emoji string) error {
+	// Verify user has access to the message
+	message, err := uc.MessageRepo.GetMessageByID(messageID)
+	if err != nil {
+		return err
+	}
+
+	// Verify user is part of the chat
+	chat, err := uc.ChatRepo.GetChatByID(message.ChatID)
+	if err != nil {
+		return err
+	}
+
+	if chat.UserID1 != userID && chat.UserID2 != userID {
+		return errors.New("unauthorized")
+	}
+
+	return uc.MessageRepo.AddReaction(messageID, userID, emoji)
+}
+
+func (uc *ChatUseCase) RemoveReaction(messageID, userID, emoji string) error {
+	// Verify user has access to the message
+	message, err := uc.MessageRepo.GetMessageByID(messageID)
+	if err != nil {
+		return err
+	}
+
+	// Verify user is part of the chat
+	chat, err := uc.ChatRepo.GetChatByID(message.ChatID)
+	if err != nil {
+		return err
+	}
+
+	if chat.UserID1 != userID && chat.UserID2 != userID {
+		return errors.New("unauthorized")
+	}
+
+	return uc.MessageRepo.RemoveReaction(messageID, userID, emoji)
+}
+
+func (uc *ChatUseCase) MarkMessageAsRead(messageID, userID string) error {
+	// Verify user has access to the message
+	message, err := uc.MessageRepo.GetMessageByID(messageID)
+	if err != nil {
+		return err
+	}
+
+	// Verify user is part of the chat
+	chat, err := uc.ChatRepo.GetChatByID(message.ChatID)
+	if err != nil {
+		return err
+	}
+
+	if chat.UserID1 != userID && chat.UserID2 != userID {
+		return errors.New("unauthorized")
+	}
+
+	// Don't mark own messages as read
+	if message.SenderID == userID {
+		return nil
+	}
+
+	return uc.MessageRepo.MarkAsRead(messageID, userID)
+}
+
+func (uc *ChatUseCase) messageToMap(msg entity.Message, currentUserID string, sender entity.User) map[string]interface{} {
+	// Get reply message if exists
+	var replyTo map[string]interface{} = nil
+	if msg.ReplyToID != "" {
+		replyMsg, err := uc.MessageRepo.GetMessageByID(msg.ReplyToID)
+		if err == nil {
+			replySender, _ := uc.UserRepo.GetByID(replyMsg.SenderID)
+			replyTo = map[string]interface{}{
+				"id":       replyMsg.ID,
+				"content":  replyMsg.Content,
+				"sender":   replySender.FullName,
+				"senderId": replyMsg.SenderID,
+			}
+		}
+	}
+
+	// Get read receipts with user info
+	readReceipts := make([]map[string]interface{}, 0)
+	for _, receipt := range msg.ReadReceipts {
+		user, _ := uc.UserRepo.GetByID(receipt.UserID)
+		readReceipts = append(readReceipts, map[string]interface{}{
+			"user_id": receipt.UserID,
+			"user_name": user.FullName,
+			"user_avatar": user.Avatar,
+			"read_at": receipt.ReadAt,
+		})
+	}
+
+	return map[string]interface{}{
+		"id":            msg.ID,
+		"sender":        sender.FullName,
+		"senderId":      msg.SenderID,
+		"type":          msg.Type,
+		"content":       msg.Content,
+		"replyTo":       replyTo,
+		"attachments":   msg.Attachments,
+		"reactions":     msg.Reactions,
+		"readReceipts":  readReceipts,
+		"status":        msg.Status,
+		"time":          msg.CreatedAt,
+		"isMe":          msg.SenderID == currentUserID,
+	}
 }
 
 
