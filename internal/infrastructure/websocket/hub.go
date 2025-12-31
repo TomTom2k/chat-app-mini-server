@@ -35,8 +35,8 @@ type Hub struct {
 	// User repository for updating online status
 	UserRepo domain.UserRepository
 
-	// Chat repository for getting chat participants
-	ChatRepo domain.ChatRepository
+	// Conversation repository for getting conversation participants
+	ConversationRepo domain.ConversationRepository
 
 	// Message repository for getting message info
 	MessageRepo domain.MessageRepository
@@ -55,16 +55,16 @@ type Message struct {
 	Timestamp string                 `json:"timestamp,omitempty"`
 }
 
-func NewHub(userRepo domain.UserRepository, chatRepo domain.ChatRepository, messageRepo domain.MessageRepository) *Hub {
+func NewHub(userRepo domain.UserRepository, conversationRepo domain.ConversationRepository, messageRepo domain.MessageRepository) *Hub {
 	return &Hub{
-		clients:     make(map[string]*Client),
-		Broadcast:   make(chan *Message, 256),
-		Register:    make(chan *Client),
-		Unregister:  make(chan *Client),
-		UserRepo:    userRepo,
-		ChatRepo:    chatRepo,
-		MessageRepo: messageRepo,
-		mu:          sync.RWMutex{},
+		clients:          make(map[string]*Client),
+		Broadcast:        make(chan *Message, 256),
+		Register:         make(chan *Client),
+		Unregister:       make(chan *Client),
+		UserRepo:         userRepo,
+		ConversationRepo: conversationRepo,
+		MessageRepo:      messageRepo,
+		mu:               sync.RWMutex{},
 	}
 }
 
@@ -121,16 +121,22 @@ func (h *Hub) handleBroadcast(message *Message) {
 	case "typing":
 		h.broadcastToChat(message)
 	case "reaction", "read_receipt":
-		// Get chat ID from message data or from the original message
-		if message.ChatID != "" {
+		// Get conversation ID from message data or from the original message
+		conversationID := message.ChatID
+		if conversationID == "" {
+			conversationID = message.GroupID
+		}
+		
+		if conversationID != "" {
+			message.ChatID = conversationID
 			h.broadcastToChat(message)
 		} else {
-			// Try to get chatID from messageID
+			// Try to get conversationID from messageID
 			msgID, ok := message.Data["messageId"].(string)
 			if ok && h.MessageRepo != nil {
 				msg, err := h.MessageRepo.GetMessageByID(msgID)
 				if err == nil {
-					message.ChatID = msg.ChatID
+					message.ChatID = msg.GetConversationID()
 					h.broadcastToChat(message)
 				} else {
 					h.broadcastToAll(message)
@@ -147,41 +153,39 @@ func (h *Hub) handleBroadcast(message *Message) {
 }
 
 func (h *Hub) broadcastToChat(message *Message) {
-	chatID := message.ChatID
-	if chatID == "" {
-		chatID = message.GroupID
+	conversationID := message.ChatID
+	if conversationID == "" {
+		conversationID = message.GroupID
 	}
 
-	if chatID == "" {
+	if conversationID == "" {
 		return
 	}
 
-	// Get chat participants
-	chat, err := h.ChatRepo.GetChatByID(chatID)
+	// Get conversation participants
+	conversation, err := h.ConversationRepo.GetConversationByID(conversationID)
 	if err != nil {
 		// Fallback: send to subscribed clients only
-		h.broadcastToSubscribedClients(message, chatID)
+		h.broadcastToSubscribedClients(message, conversationID)
 		return
 	}
 
-	// Send to both participants of the chat (if they're online)
-	participants := []string{chat.UserID1, chat.UserID2}
-	
+	// Send to all members of the conversation (if they're online)
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
-	for _, userID := range participants {
+	for _, member := range conversation.Members {
 		// Skip sender
-		if userID == message.SenderID {
+		if member.UserID == message.SenderID {
 			continue
 		}
 
-		if client, ok := h.clients[userID]; ok {
+		if client, ok := h.clients[member.UserID]; ok {
 			select {
 			case client.Send <- h.messageToBytes(message):
 			default:
 				close(client.Send)
-				delete(h.clients, userID)
+				delete(h.clients, member.UserID)
 			}
 		}
 	}

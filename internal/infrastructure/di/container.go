@@ -14,21 +14,17 @@ import (
 type Container struct {
 	Config              *config.Config
 	UserRepository      domain.UserRepository
-	ChatRepository      domain.ChatRepository
+	ConversationRepository domain.ConversationRepository
 	MessageRepository   domain.MessageRepository
 	FriendRepository    domain.FriendRepository
-	GroupRepository     domain.GroupRepository
-	GroupMemberRepository domain.GroupMemberRepository
 	
 	UserUseCase         *usecase.UserUseCase
-	ChatUseCase         *usecase.ChatUseCase
+	ConversationUseCase *usecase.ConversationUseCase
 	FriendUseCase       *usecase.FriendUseCase
-	GroupUseCase        *usecase.GroupUseCase
 	
 	UserHandler         *http.UserHandler
-	ChatHandler         *http.ChatHandler
+	ConversationHandler *http.ConversationHandler
 	FriendHandler       *http.FriendHandler
-	GroupHandler        *http.GroupHandler
 	
 	Hub                 *websocket.Hub
 	WebSocketHandler    *wsHandler.WebSocketHandler
@@ -38,11 +34,9 @@ type Container struct {
 func NewContainer(cfg *config.Config) *Container {
 	// Initialize repositories
 	userRepo := repository.NewUserRepository()
-	chatRepo := repository.NewChatRepository()
+	conversationRepo := repository.NewConversationRepository()
 	messageRepo := repository.NewMessageRepository()
 	friendRepo := repository.NewFriendRepository()
-	groupRepo := repository.NewGroupRepository()
-	groupMemberRepo := repository.NewGroupMemberRepository()
 
 	// Initialize usecases
 	userUseCase := &usecase.UserUseCase{
@@ -51,14 +45,14 @@ func NewContainer(cfg *config.Config) *Container {
 	}
 
 	// Initialize WebSocket Hub first (needed by use cases)
-	hub := websocket.NewHub(userRepo, chatRepo, messageRepo)
+	hub := websocket.NewHub(userRepo, conversationRepo, messageRepo)
 	go hub.Run()
 
-	chatUseCase := &usecase.ChatUseCase{
-		ChatRepo:    chatRepo,
-		UserRepo:    userRepo,
-		MessageRepo: messageRepo,
-		Hub:         hub,
+	conversationUseCase := &usecase.ConversationUseCase{
+		ConversationRepo: conversationRepo,
+		UserRepo:         userRepo,
+		MessageRepo:      messageRepo,
+		Hub:              hub,
 	}
 
 	friendUseCase := &usecase.FriendUseCase{
@@ -66,30 +60,19 @@ func NewContainer(cfg *config.Config) *Container {
 		Hub:      hub,
 	}
 
-	groupUseCase := &usecase.GroupUseCase{
-		GroupRepo:       groupRepo,
-		GroupMemberRepo: groupMemberRepo,
-		UserRepo:        userRepo,
-		MessageRepo:     messageRepo,
-	}
-
 	// Initialize handlers
 	userHandler := &http.UserHandler{
 		UserUseCase: *userUseCase,
 	}
 
-	chatHandler := &http.ChatHandler{
-		ChatUseCase: *chatUseCase,
-		Hub:         hub,
-		MessageRepo: messageRepo,
+	conversationHandler := &http.ConversationHandler{
+		ConversationUseCase: *conversationUseCase,
+		Hub:                 hub,
+		MessageRepo:         messageRepo,
 	}
 
 	friendHandler := &http.FriendHandler{
 		FriendUseCase: *friendUseCase,
-	}
-
-	groupHandler := &http.GroupHandler{
-		GroupUseCase: *groupUseCase,
 	}
 
 	// Initialize WebSocket Handler
@@ -99,23 +82,19 @@ func NewContainer(cfg *config.Config) *Container {
 	}
 
 	return &Container{
-		Config:              cfg,
-		UserRepository:      userRepo,
-		ChatRepository:      chatRepo,
-		MessageRepository:   messageRepo,
-		FriendRepository:    friendRepo,
-		GroupRepository:     groupRepo,
-		GroupMemberRepository: groupMemberRepo,
-		UserUseCase:         userUseCase,
-		ChatUseCase:         chatUseCase,
-		FriendUseCase:       friendUseCase,
-		GroupUseCase:        groupUseCase,
-		UserHandler:         userHandler,
-		ChatHandler:         chatHandler,
-		FriendHandler:       friendHandler,
-		GroupHandler:        groupHandler,
-		Hub:                 hub,
-		WebSocketHandler:    wsHandler,
+		Config:                cfg,
+		UserRepository:        userRepo,
+		ConversationRepository: conversationRepo,
+		MessageRepository:     messageRepo,
+		FriendRepository:      friendRepo,
+		UserUseCase:           userUseCase,
+		ConversationUseCase:    conversationUseCase,
+		FriendUseCase:          friendUseCase,
+		UserHandler:            userHandler,
+		ConversationHandler:    conversationHandler,
+		FriendHandler:          friendHandler,
+		Hub:                    hub,
+		WebSocketHandler:       wsHandler,
 	}
 }
 

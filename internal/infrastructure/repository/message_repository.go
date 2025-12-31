@@ -47,37 +47,31 @@ func (r *messageRepository) CreateMessage(message entity.Message) error {
 	if message.Attachments == nil {
 		message.Attachments = []entity.MessageAttachment{}
 	}
+	// Set ConversationID from ChatID or GroupID if not set (backward compatibility)
+	if message.ConversationID == "" {
+		if message.ChatID != "" {
+			message.ConversationID = message.ChatID
+		} else if message.GroupID != "" {
+			message.ConversationID = message.GroupID
+		}
+	}
 
 	_, err := r.collection.InsertOne(ctx, message)
 	return err
 }
 
-func (r *messageRepository) GetMessagesByChatID(chatID string) ([]entity.Message, error) {
+func (r *messageRepository) GetMessagesByConversationID(conversationID string) ([]entity.Message, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	filter := bson.M{"chat_id": chatID}
-	opts := options.Find().SetSort(bson.D{{Key: "created_at", Value: 1}})
-
-	cursor, err := r.collection.Find(ctx, filter, opts)
-	if err != nil {
-		return nil, err
+	// Support both old format (chat_id/group_id) and new format (conversation_id)
+	filter := bson.M{
+		"$or": []bson.M{
+			{"conversation_id": conversationID},
+			{"chat_id": conversationID},
+			{"group_id": conversationID},
+		},
 	}
-	defer cursor.Close(ctx)
-
-	var messages []entity.Message
-	if err := cursor.All(ctx, &messages); err != nil {
-		return nil, err
-	}
-
-	return messages, nil
-}
-
-func (r *messageRepository) GetMessagesByGroupID(groupID string) ([]entity.Message, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	filter := bson.M{"group_id": groupID}
 	opts := options.Find().SetSort(bson.D{{Key: "created_at", Value: 1}})
 
 	cursor, err := r.collection.Find(ctx, filter, opts)

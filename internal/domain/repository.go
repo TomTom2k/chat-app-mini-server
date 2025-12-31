@@ -18,18 +18,19 @@ type UserRepository interface {
 	GetUsersByIDs(userIDs []string) ([]entity.User, error)
 }
 
-type ChatRepository interface {
-	CreateChat(chat entity.Chat) error
-	GetChatByID(chatID string) (entity.Chat, error)
-	GetChatsByUserID(userID string) ([]entity.Chat, error)
-	GetChatByUserIDs(userID1, userID2 string) (entity.Chat, error)
-	UpdateChat(chat entity.Chat) error
+type ConversationRepository interface {
+	CreateConversation(conversation entity.Conversation) error
+	GetConversationByID(conversationID string) (entity.Conversation, error)
+	GetConversationsByUserID(userID string) ([]entity.Conversation, error)
+	GetDirectConversationByUserIDs(userID1, userID2 string) (entity.Conversation, error)
+	UpdateConversation(conversation entity.Conversation) error
+	AddMember(conversationID, userID, role string) error
+	RemoveMember(conversationID, userID string) error
 }
 
 type MessageRepository interface {
 	CreateMessage(message entity.Message) error
-	GetMessagesByChatID(chatID string) ([]entity.Message, error)
-	GetMessagesByGroupID(groupID string) ([]entity.Message, error)
+	GetMessagesByConversationID(conversationID string) ([]entity.Message, error)
 	GetMessageByID(messageID string) (entity.Message, error)
 	UpdateMessage(message entity.Message) error
 	AddReaction(messageID, userID, emoji string) error
@@ -49,16 +50,3 @@ type FriendRepository interface {
 	UpdateFriend(friend entity.Friend) error
 }
 
-type GroupRepository interface {
-	CreateGroup(group entity.Group) error
-	GetGroupByID(groupID string) (entity.Group, error)
-	GetGroupsByUserID(userID string) ([]entity.Group, error)
-	UpdateGroup(group entity.Group) error
-}
-
-type GroupMemberRepository interface {
-	CreateGroupMember(member entity.GroupMember) error
-	GetGroupMembersByGroupID(groupID string) ([]entity.GroupMember, error)
-	GetGroupMembersByUserID(userID string) ([]entity.GroupMember, error)
-	DeleteGroupMember(groupID, userID string) error
-}

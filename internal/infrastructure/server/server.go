@@ -80,9 +80,8 @@ func setupRoutes(router *gin.Engine, container *di.Container) {
 	api := router.Group("/api")
 	{
 		setupAuthRoutes(api, container)
-		setupChatRoutes(api, container)
+		setupConversationRoutes(api, container)
 		setupFriendRoutes(api, container)
-		setupGroupRoutes(api, container)
 		setupUserRoutes(api, container)
 		setupWebSocketRoutes(router, container)
 	}
@@ -103,19 +102,44 @@ func setupAuthRoutes(api *gin.RouterGroup, container *di.Container) {
 	}
 }
 
-func setupChatRoutes(api *gin.RouterGroup, container *di.Container) {
+func setupConversationRoutes(api *gin.RouterGroup, container *di.Container) {
+	conversations := api.Group("/conversations")
+	conversations.Use(http.AuthMiddleware(container.Config))
+	{
+		conversations.GET("", container.ConversationHandler.GetConversations)
+		conversations.POST("/direct", container.ConversationHandler.CreateDirectConversation)
+		conversations.POST("/group", container.ConversationHandler.CreateGroupConversation)
+		conversations.GET("/:conversationId", container.ConversationHandler.GetConversation)
+		conversations.GET("/:conversationId/messages", container.ConversationHandler.GetMessages)
+		conversations.POST("/:conversationId/messages", container.ConversationHandler.SendMessage)
+		conversations.POST("/upload", container.ConversationHandler.UploadFile)
+		conversations.POST("/messages/:messageId/reactions", container.ConversationHandler.AddReaction)
+		conversations.DELETE("/messages/:messageId/reactions", container.ConversationHandler.RemoveReaction)
+		conversations.POST("/messages/:messageId/read", container.ConversationHandler.MarkAsRead)
+	}
+	
+	// Keep backward compatibility with /chats routes
 	chats := api.Group("/chats")
 	chats.Use(http.AuthMiddleware(container.Config))
 	{
-		chats.GET("", container.ChatHandler.GetChats)
-		chats.POST("", container.ChatHandler.CreateChat)
-		chats.GET("/:chatId", container.ChatHandler.GetChat)
-		chats.GET("/:chatId/messages", container.ChatHandler.GetMessages)
-		chats.POST("/:chatId/messages", container.ChatHandler.SendMessage)
-		chats.POST("/upload", container.ChatHandler.UploadFile)
-		chats.POST("/messages/:messageId/reactions", container.ChatHandler.AddReaction)
-		chats.DELETE("/messages/:messageId/reactions", container.ChatHandler.RemoveReaction)
-		chats.POST("/messages/:messageId/read", container.ChatHandler.MarkAsRead)
+		chats.GET("", container.ConversationHandler.GetConversations)
+		chats.POST("", container.ConversationHandler.CreateDirectConversation)
+		chats.GET("/:chatId", func(c *gin.Context) {
+			c.Params[0].Key = "conversationId"
+			container.ConversationHandler.GetConversation(c)
+		})
+		chats.GET("/:chatId/messages", func(c *gin.Context) {
+			c.Params[0].Key = "conversationId"
+			container.ConversationHandler.GetMessages(c)
+		})
+		chats.POST("/:chatId/messages", func(c *gin.Context) {
+			c.Params[0].Key = "conversationId"
+			container.ConversationHandler.SendMessage(c)
+		})
+		chats.POST("/upload", container.ConversationHandler.UploadFile)
+		chats.POST("/messages/:messageId/reactions", container.ConversationHandler.AddReaction)
+		chats.DELETE("/messages/:messageId/reactions", container.ConversationHandler.RemoveReaction)
+		chats.POST("/messages/:messageId/read", container.ConversationHandler.MarkAsRead)
 	}
 }
 
@@ -141,17 +165,6 @@ func setupFriendRoutes(api *gin.RouterGroup, container *di.Container) {
 	}
 }
 
-func setupGroupRoutes(api *gin.RouterGroup, container *di.Container) {
-	groups := api.Group("/groups")
-	groups.Use(http.AuthMiddleware(container.Config))
-	{
-		groups.GET("", container.GroupHandler.GetGroups)
-		groups.POST("", container.GroupHandler.CreateGroup)
-		groups.GET("/:groupId", container.GroupHandler.GetGroup)
-		groups.GET("/:groupId/messages", container.GroupHandler.GetMessages)
-		groups.POST("/:groupId/messages", container.GroupHandler.SendMessage)
-	}
-}
 
 func setupUserRoutes(api *gin.RouterGroup, container *di.Container) {
 	// User routes can be added here if needed
